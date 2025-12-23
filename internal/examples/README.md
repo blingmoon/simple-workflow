@@ -2,6 +2,32 @@
 
 这个目录包含 simple-workflow 的使用示例。
 
+## ⚠️ 内部模块保护
+
+**此目录位于 `internal/` 下，受 Go 编译器保护，外部项目无法导入！**
+
+🔒 **编译器强制限制**：
+
+如果外部项目尝试导入：
+```go
+import "github.com/blingmoon/simple-workflow/internal/examples"
+```
+
+将会得到**编译错误**：
+```
+use of internal package github.com/blingmoon/simple-workflow/internal/examples not allowed
+```
+
+✅ **正确使用方式**：
+- 查看示例代码学习用法
+- 复制示例代码到你自己的项目中
+- **不要**尝试导入 internal/examples 包
+
+📖 关于 `internal` 机制：
+- Go 1.4+ 引入的特性
+- `internal/` 目录下的包只能被其父目录导入
+- 用于保护内部实现，防止外部依赖
+
 ## 重要说明
 
 **这个 examples 目录是一个独立的 Go 模块**，它有自己的 `go.mod` 文件。这意味着：

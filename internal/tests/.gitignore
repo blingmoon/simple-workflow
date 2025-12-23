@@ -1,0 +1,15 @@
+# 测试生成的文件
+*.test
+*.out
+coverage.html
+coverage.out
+
+# SQLite 数据库文件
+*.db
+*.db-shm
+*.db-wal
+
+# IDE 文件
+.vscode/
+.idea/
+

@@ -19,7 +19,17 @@ type WorkflowService interface {
 	CountWorkflowInstance(ctx context.Context, params *QueryWorkflowInstanceParams) (int64, error)
 	/**
 	 * @description: 查询工作流实例详情
+	 * @param ctx context.Context
+	 * @param params *QueryWorkflowInstanceParams
+	 * @return []*WorkflowInstanceDetailEntity, error
+	 */
 	QueryWorkflowInstanceDetail(ctx context.Context, params *QueryWorkflowInstanceParams) ([]*WorkflowInstanceDetailEntity, error)
+	/**
+	 * @description: 查询工作流实例Po
+	 * @param ctx context.Context
+	 * @param params *QueryWorkflowInstanceParams
+	 * @return []*WorkflowInstancePo, error
+	 */
 	QueryWorkflowInstancePo(ctx context.Context, params *QueryWorkflowInstanceParams) ([]*WorkflowInstancePo, error)
 	/**
 	 * @description: 运行工作流
@@ -28,7 +38,7 @@ type WorkflowService interface {
 	 * @param ctx context.Context
 	 * @param workflowID int64
 	 * @return error
-	*/
+	 */
 	RunWorkflow(ctx context.Context, workflowID int64) error
 	/**
 	 * @description: 取消工作流，手动取消工作流，目前没有使用，将来使用扩展

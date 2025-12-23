@@ -24,16 +24,43 @@ jobs:
         go-version: ${{ matrix.go-version }}
 
     - name: Download dependencies
-      run: go mod download
+      run: |
+        go mod download
+        cd internal/tests && go mod download
 
-    - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out ./...
+    - name: Run workflow package tests
+      run: go test -v -race -coverprofile=coverage-workflow.out ./workflow/...
 
-    - name: Upload coverage
+    - name: Run tests directory tests with coverage
+      run: |
+        cd internal/tests
+        go test -v -race -coverprofile=coverage.out -coverpkg=github.com/blingmoon/simple-workflow/workflow ./...
+        
+    - name: Merge coverage reports
+      run: |
+        go install github.com/wadey/gocovmerge@latest
+        gocovmerge coverage-workflow.out internal/tests/coverage.out > coverage-merged.out
+        
+    - name: Display coverage summary
+      run: |
+        echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Workflow Package Coverage" >> $GITHUB_STEP_SUMMARY
+        go tool cover -func=coverage-workflow.out | tail -1 >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Tests Directory Coverage (for workflow package)" >> $GITHUB_STEP_SUMMARY
+        cd internal/tests && go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY && cd ../..
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Merged Coverage" >> $GITHUB_STEP_SUMMARY
+        go tool cover -func=coverage-merged.out | tail -1 >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: ./coverage.out
-        token: ${{ secrets.CODECOV_TOKEN }}  # ✅ 添加 token（Codecov v4 需要）
+        files: ./coverage-merged.out,./internal/tests/coverage.out
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: unittests
+        name: codecov-umbrella
 
   lint:
     name: Lint
