@@ -1,9 +1,6 @@
 run:
   timeout: 5m
   tests: true
-  build-tags: []
-  skip-dirs: []
-  skip-files: []
   modules-download-mode: readonly
 
 output:
@@ -11,7 +8,6 @@ output:
     - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true
 
 linters:
@@ -34,8 +30,10 @@ linters-settings:
     check-type-assertions: true
   
   govet:
-    check-shadowing: true
     enable-all: true
+    settings:
+      shadow:
+        strict: true
   
   staticcheck:
     checks: ["all"]
