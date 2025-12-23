@@ -13,7 +13,8 @@ _debug_bin*
 # Test binary, built with `go test -c`
 *.test
 # sqlite3 database file
-.sqlite3
+*.sqlite3
+*.db
 
 
 

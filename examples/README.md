@@ -14,13 +14,18 @@
 
 ```
 examples/
-├── go.mod          # 独立的模块定义
-├── go.sum          # 独立的依赖锁定
-├── README.md       # 本文件
-├── basic/          # 基础示例
-│   └── main.go
-└── advanced/       # (示例) 高级示例
-    └── main.go
+├── go.mod           # 独立的模块定义
+├── go.sum           # 独立的依赖锁定
+├── README.md        # 本文件
+├── QUICKSTART.md    # 快速开始指南
+├── VERIFY.md        # 依赖独立性验证
+├── with-sqlite/     # SQLite 完整示例
+│   ├── main.go
+│   ├── workflow_test.go
+│   └── README.md
+└── with-gin/        # Gin Web 框架示例
+    ├── main.go
+    └── README.md
 ```
 
 ## 运行示例
@@ -124,8 +129,45 @@ go list -m all
 
 ## 示例列表
 
-- `basic/` - 基础工作流使用示例
-- (待添加更多示例...)
+### 📦 with-sqlite/ - SQLite 完整示例
+
+**推荐作为第一个学习示例！**
+
+展示如何使用 SQLite 作为存储后端，包含完整的工作流创建、注册、执行流程。
+
+**特性**：
+- ✅ 使用 SQLite + GORM 进行数据持久化
+- ✅ 完整的工作流生命周期演示
+- ✅ 包含同步和异步任务节点
+- ✅ JSONContext 使用示例
+- ✅ 完整的单元测试
+
+**快速开始**：
+```bash
+cd examples/with-sqlite
+go run main.go
+```
+
+详见：[with-sqlite/README.md](./with-sqlite/README.md)
+
+---
+
+### 🌐 with-gin/ - Gin Web 框架集成
+
+展示如何将 simple-workflow 集成到 Gin Web 应用中。
+
+**特性**：
+- ✅ HTTP API 触发工作流
+- ✅ 查询工作流状态接口
+- ✅ RESTful API 设计
+
+**快速开始**：
+```bash
+cd examples/with-gin
+go run main.go
+```
+
+详见：[with-gin/README.md](./with-gin/README.md)
 
 ## 常见问题
 
