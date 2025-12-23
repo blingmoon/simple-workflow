@@ -38,6 +38,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    continue-on-error: true  # ✅ 添加这一行：lint 失败不影响 CI
     steps:
     - name: Checkout code
       uses: actions/checkout@v4

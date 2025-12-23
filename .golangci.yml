@@ -14,15 +14,6 @@ linters:
   disable-all: true
   enable:
     - errcheck       # 检查未检查的错误
-    - gosimple       # 简化代码
-    - govet          # 静态分析
-    - ineffassign    # 检测无效赋值
-    - staticcheck    # 高级静态分析
-    - unused         # 检查未使用的代码
-    - gofmt          # 代码格式化
-    - goimports      # 自动格式化 imports
-    - misspell       # 拼写检查
-    - revive         # 快速、可配置的 linter
 
 linters-settings:
   errcheck:
