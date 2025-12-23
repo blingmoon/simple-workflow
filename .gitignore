@@ -7,9 +7,15 @@
 *.dll
 *.so
 *.dylib
+# debug binary file
+_debug_bin*
 
 # Test binary, built with `go test -c`
 *.test
+# sqlite3 database file
+.sqlite3
+
+
 
 # Code coverage profiles and other test artifacts
 *.out
@@ -28,5 +34,5 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
