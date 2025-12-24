@@ -1,0 +1,202 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: '版本类型 (major/minor/patch)'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+      dry_run:
+        description: '仅预览，不实际创建 tag'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史记录
+
+      - name: 配置 Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: 获取最新 tag
+        id: get_latest_tag
+        run: |
+          # 获取最新的 tag（按版本号排序）
+          latest_tag=$(git tag -l "v*.*.*" | sort -V | tail -n 1)
+          
+          if [ -z "$latest_tag" ]; then
+            echo "没有找到现有 tag，将从 v0.0.0 开始"
+            latest_tag="v0.0.0"
+          fi
+          
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          echo "📌 最新 tag: $latest_tag"
+
+      - name: 检查是否有变化
+        id: check_changes
+        run: |
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          
+          if [ "$latest_tag" = "v0.0.0" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ 首次发布，跳过变化检查"
+            exit 0
+          fi
+          
+          # 比较 master 和最新 tag 之间的差异
+          changes=$(git log ${latest_tag}..HEAD --oneline)
+          
+          if [ -z "$changes" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "⚠️  没有检测到变化"
+            echo "::warning::master 分支和最新 tag ${latest_tag} 之间没有新的提交"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ 检测到以下变化:"
+            echo "$changes"
+            echo ""
+            echo "📊 统计信息:"
+            git diff --shortstat ${latest_tag}..HEAD
+          fi
+
+      - name: 计算新版本号
+        id: new_version
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          version_type="${{ github.event.inputs.version_type }}"
+          
+          # 移除 'v' 前缀
+          version=${latest_tag#v}
+          
+          # 分解版本号
+          IFS='.' read -r major minor patch <<< "$version"
+          
+          # 根据版本类型递增
+          case "$version_type" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+          
+          new_version="v${major}.${minor}.${patch}"
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+          echo "🎯 新版本: $new_version"
+
+      - name: 运行测试
+        if: steps.check_changes.outputs.has_changes == 'true' && github.event.inputs.dry_run == 'false'
+        run: |
+          echo "🧪 运行测试..."
+          go test -v ./workflow/...
+
+      - name: 预览模式 - 显示将要执行的操作
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🔍 预览模式 - 不会实际创建 tag"
+          echo ""
+          echo "📋 将要执行的操作:"
+          echo "  - 当前最新 tag: ${{ steps.get_latest_tag.outputs.latest_tag }}"
+          echo "  - 是否有变化: ${{ steps.check_changes.outputs.has_changes }}"
+          if [ "${{ steps.check_changes.outputs.has_changes }}" = "true" ]; then
+            echo "  - 将创建新 tag: ${{ steps.new_version.outputs.new_version }}"
+          else
+            echo "  - 无需创建新 tag"
+          fi
+
+      - name: 创建并推送新 tag
+        if: steps.check_changes.outputs.has_changes == 'true' && github.event.inputs.dry_run == 'false'
+        run: |
+          new_version="${{ steps.new_version.outputs.new_version }}"
+          
+          echo "🏷️  创建新 tag: $new_version"
+          git tag -a "$new_version" -m "Release $new_version"
+          git push origin "$new_version"
+          
+          echo "✅ Tag $new_version 已创建并推送"
+
+      - name: 生成变更日志
+        id: changelog
+        if: steps.check_changes.outputs.has_changes == 'true' && github.event.inputs.dry_run == 'false'
+        run: |
+          latest_tag="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          new_version="${{ steps.new_version.outputs.new_version }}"
+          
+          echo "## 📝 更新内容" > changelog.md
+          echo "" >> changelog.md
+          
+          if [ "$latest_tag" != "v0.0.0" ]; then
+            echo "**完整变更:** ${latest_tag}...${new_version}" >> changelog.md
+            echo "" >> changelog.md
+            
+            # 提取提交信息
+            git log ${latest_tag}..HEAD --pretty=format:"- %s (%h)" >> changelog.md
+            echo "" >> changelog.md
+            echo "" >> changelog.md
+            
+            # 统计信息
+            echo "## 📊 统计" >> changelog.md
+            git diff --shortstat ${latest_tag}..HEAD >> changelog.md
+          else
+            echo "🎉 首次发布" >> changelog.md
+          fi
+          
+          cat changelog.md
+
+      - name: 创建 GitHub Release
+        if: steps.check_changes.outputs.has_changes == 'true' && github.event.inputs.dry_run == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.new_version.outputs.new_version }}
+          name: Release ${{ steps.new_version.outputs.new_version }}
+          body_path: changelog.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 总结
+        if: always()
+        run: |
+          echo "## 🎉 Release 工作流总结" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **模式**: ${{ github.event.inputs.dry_run == 'true' && '🔍 预览模式' || '✅ 正式发布' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **版本类型**: ${{ github.event.inputs.version_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **最新 tag**: ${{ steps.get_latest_tag.outputs.latest_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **是否有变化**: ${{ steps.check_changes.outputs.has_changes }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check_changes.outputs.has_changes }}" = "true" ]; then
+            echo "- **新版本**: ${{ steps.new_version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "${{ github.event.inputs.dry_run }}" = "false" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "✅ **Release ${{ steps.new_version.outputs.new_version }} 已成功创建！**" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ **无需发布新版本**" >> $GITHUB_STEP_SUMMARY
+          fi
