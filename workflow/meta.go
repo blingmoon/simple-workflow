@@ -3,6 +3,9 @@ package workflow
 import "github.com/pkg/errors"
 
 var (
+	// 参数错误,调用地方使用
+	ErrWorkflowParamInvalid = errors.New("invalid param")
+
 	ErrWorkflowConfigNotFound              = errors.New("workflow config not found")
 	ErrWorkflowDefinitionNotFound          = errors.New("workflow definition not found")
 	ErrWorkflowTaskWorkerNotFound          = errors.New("workflow task worker not found")

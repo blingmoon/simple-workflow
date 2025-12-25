@@ -315,8 +315,8 @@ func BuildAddWorkfNode(endNode *WorkflowTaskNodeDefinition, addNode *WorkflowTas
 }
 
 func (s *WorkflowServiceImpl) CreateWorkflow(ctx context.Context, req *CreateWorkflowReq) (*WorkflowInstance, error) {
-	if req == nil {
-		return nil, errors.New("req is nil")
+	if err := validatorUtil.Struct(req); err != nil {
+		return nil, errors.Wrapf(ErrWorkflowParamInvalid, "CreateWorkflow failed, req: %v,err: %v", req, err)
 	}
 	workflowDefinition, err := GetAndLoadWorkflowDefinition(req.WorkflowType)
 	if err != nil && !req.IsRun {
@@ -364,6 +364,9 @@ func (s *WorkflowServiceImpl) CreateWorkflow(ctx context.Context, req *CreateWor
 }
 
 func (s *WorkflowServiceImpl) CountWorkflowInstance(ctx context.Context, params *QueryWorkflowInstanceParams) (int64, error) {
+	if err := validatorUtil.Struct(params); err != nil {
+		return 0, errors.Wrapf(ErrWorkflowParamInvalid, "CountWorkflowInstance failed, params: %v,err: %v", params, err)
+	}
 	count, err := s.repo.CountWorkflowInstance(ctx, params)
 	if err != nil {
 		return 0, errors.WithMessagef(err, "QueryWorkflowInstance failed, params: %v", params)
@@ -372,6 +375,9 @@ func (s *WorkflowServiceImpl) CountWorkflowInstance(ctx context.Context, params 
 }
 
 func (s *WorkflowServiceImpl) QueryWorkflowInstanceDetail(ctx context.Context, params *QueryWorkflowInstanceParams) ([]*WorkflowInstanceDetailEntity, error) {
+	if err := validatorUtil.Struct(params); err != nil {
+		return nil, errors.Wrapf(ErrWorkflowParamInvalid, "QueryWorkflowInstanceDetail failed, params: %v,err: %v", params, err)
+	}
 	workflowInstances, err := s.repo.QueryWorkflowInstance(ctx, params)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "QueryWorkflowInstance failed, params: %v", params)
@@ -390,6 +396,9 @@ func (s *WorkflowServiceImpl) QueryWorkflowInstanceDetail(ctx context.Context, p
 }
 
 func (s *WorkflowServiceImpl) QueryWorkflowInstancePo(ctx context.Context, params *QueryWorkflowInstanceParams) ([]*WorkflowInstancePo, error) {
+	if err := validatorUtil.Struct(params); err != nil {
+		return nil, errors.Wrapf(ErrWorkflowParamInvalid, "QueryWorkflowInstancePo failed, params: %v,err: %v", params, err)
+	}
 	workflowInstance, err := s.repo.QueryWorkflowInstance(ctx, params)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "QueryWorkflowInstancePo failed, params: %v", params)
@@ -488,7 +497,7 @@ func (s *WorkflowServiceImpl) getAllTaskInstancePo(ctx context.Context, workflow
 }
 
 type AddNodeExternalEventParams struct {
-	WorkflowInstanceID int64  `json:"workflow_instance_id" validate:"required"`
+	WorkflowInstanceID int64  `json:"workflow_instance_id" validate:"gt=0"`
 	TaskType           string `json:"task_type" validate:"required"`
 	// TaskInstanceID     int64              `json:"task_instance_id" validate:"required"`
 	NodeEvent *NodeExternalEvent `json:"node_event" validate:"required"`
@@ -499,21 +508,21 @@ type NodeExternalEvent struct {
 	EventContent string `json:"event_content"`
 }
 type RestartWorkflowNodeParams struct {
-	WorkflowInstanceID      int64  `json:"workflow_instance_id" validate:"required"`
+	WorkflowInstanceID      int64  `json:"workflow_instance_id" validate:"gt=0"`
 	TaskType                string `json:"task_type" validate:"required"`
 	IsForcedRestartWorkflow bool   `json:"is_forced_restart_workflow"` // 是否强制重启工作流,如果是true即使工作流实例已经结束,也会重启工作流
 	// IsAsynchronous          bool   `json:"is_asynchronous" `           // 是否异步重启,如果为true，则不等待任务执行完成,直接返回
 }
 
 type RestartWorkflowParams struct {
-	WorkflowInstanceID int64 `json:"workflow_instance_id" validate:"required"`
+	WorkflowInstanceID int64 `json:"workflow_instance_id" validate:"gt=0"`
 	// Context            map[string]any // 上下文,如果有值，则覆盖掉原来的上下文
 	IsRun bool // 是否立即执行,如果为true，则立即执行
 }
 
 func (s *WorkflowServiceImpl) RestartWorkflowNode(ctx context.Context, restartParams *RestartWorkflowNodeParams) error {
 	if err := validatorUtil.Struct(restartParams); err != nil {
-		return errors.WithMessagef(err, "RestartWorkflowNode failed, restartParams: %v", restartParams)
+		return errors.Wrapf(ErrWorkflowParamInvalid, "RestartWorkflowNode failed, restartParams: %v,err: %v", restartParams, err)
 	}
 	err := s.executeLock.NonBlockingSynchronized(ctx,
 		workflowOpLockKey(restartParams.WorkflowInstanceID),
@@ -623,7 +632,7 @@ func (s *WorkflowServiceImpl) RestartWorkflowNode(ctx context.Context, restartPa
 }
 func (s *WorkflowServiceImpl) RestartWorkflowInstance(ctx context.Context, restartParams *RestartWorkflowParams) error {
 	if err := validatorUtil.Struct(restartParams); err != nil {
-		return errors.WithMessagef(err, "RestartWorkflowInstance failed, restartParams: %v", restartParams)
+		return errors.Wrapf(ErrWorkflowParamInvalid, "RestartWorkflowInstance failed, restartParams: %v,err: %v", restartParams, err)
 	}
 	err := s.executeLock.NonBlockingSynchronized(ctx,
 		workflowOpLockKey(restartParams.WorkflowInstanceID),
@@ -700,6 +709,9 @@ func (s *WorkflowServiceImpl) RestartWorkflowInstance(ctx context.Context, resta
 
 // 添加节点外部事件,会覆盖掉旧的事件
 func (s *WorkflowServiceImpl) AddNodeExternalEvent(ctx context.Context, addParams *AddNodeExternalEventParams) error {
+	if err := validatorUtil.Struct(addParams); err != nil {
+		return errors.Wrapf(ErrWorkflowParamInvalid, "AddNodeExternalEvent failed, addParams: %v,err: %v", addParams, err)
+	}
 	err := s.executeLock.NonBlockingSynchronized(ctx,
 		workflowOpLockKey(addParams.WorkflowInstanceID),
 		10*time.Minute,
@@ -819,6 +831,9 @@ type WorkflowInstance struct {
 }
 
 func (s *WorkflowServiceImpl) RunWorkflow(ctx context.Context, workflowID int64) error {
+	if workflowID <= 0 {
+		return errors.Wrapf(ErrWorkflowParamInvalid, "RunWorkflow failed, workflowID: %d", workflowID)
+	}
 	workflowInstances, err := s.repo.QueryWorkflowInstance(ctx, &QueryWorkflowInstanceParams{
 		WorkflowInstanceID: &workflowID,
 		Page: &Pager{
@@ -914,6 +929,9 @@ func (s *WorkflowServiceImpl) RunWorkflow(ctx context.Context, workflowID int64)
 }
 
 func (s *WorkflowServiceImpl) CancelWorkflowInstance(ctx context.Context, workflowInstanceID int64) error {
+	if workflowInstanceID <= 0 {
+		return errors.Wrapf(ErrWorkflowParamInvalid, "CancelWorkflowInstance failed, workflowInstanceID: %d", workflowInstanceID)
+	}
 	return s.executeLock.NonBlockingSynchronized(ctx,
 		workflowOpLockKey(workflowInstanceID),
 		10*time.Minute,
