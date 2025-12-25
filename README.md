@@ -259,6 +259,206 @@ success, ok := nodeContext.GetBool("is_success")
 orderID, ok := nodeContext.GetString("workflow_context", "order_id")
 ```
 
+### NodeContext 数据流转机制
+
+`NodeContext` 是节点间数据传递的核心机制。理解数据如何从前一个节点传递到下一个节点非常重要。
+
+#### NodeContext 结构
+
+每个节点的 `NodeContext` 包含以下主要部分：
+
+```json
+{
+  "pre_node_context": {
+    "前置节点1的TaskType": {
+      "前置节点1输出的所有数据（已清理）"
+    },
+    "前置节点2的TaskType": {
+      "前置节点2输出的所有数据（已清理）"
+    }
+  },
+  "workflow_context": {
+    "工作流全局上下文数据"
+  },
+  "当前节点自己写入的数据": "值"
+}
+```
+
+#### 数据转换过程
+
+**1. 节点初始化时的数据转换**
+
+当工作流引擎创建新节点时，会自动进行以下转换：
+
+```go
+// 伪代码展示转换过程
+func createNodeContext(preNodes []*WorkflowTaskNode, workflowContext *JSONContext) *JSONContext {
+    preNodeAllContext := make(map[string]interface{})
+    
+    // 遍历所有前置节点
+    for _, preNode := range preNodes {
+        preNodeMap := preNode.NodeContext.ToMap()
+        
+        // 清理不需要传递的字段
+        delete(preNodeMap, "pre_node_context")  // 不追溯到上层
+        delete(preNodeMap, "workflow_context")  // 冗余字段
+        delete(preNodeMap, "system")            // 系统参数不传递
+        
+        // 按前置节点的 TaskType 组织数据
+        preNodeAllContext[preNode.TaskType] = preNodeMap
+    }
+    
+    // 创建新节点的上下文
+    return NewJSONContextFromMap(map[string]any{
+        "pre_node_context": preNodeAllContext,
+        "workflow_context": workflowContext.ToMap(),
+    })
+}
+```
+
+**2. 实际示例：数据流转**
+
+假设有一个工作流：`submit` → `review` → `approve`
+
+```go
+// 节点1: submit（提交节点）
+workflow.RegisterWorkflowTask("approval_workflow", "submit",
+    workflow.NewNormalTaskWorker(
+        func(ctx context.Context, nodeContext *workflow.JSONContext) error {
+            // 写入提交节点的输出数据
+            nodeContext.Set([]string{"submit_time"}, time.Now().Unix())
+            nodeContext.Set([]string{"status"}, "submitted")
+            nodeContext.Set([]string{"amount"}, 1000.0)
+            
+            // submit 节点的 NodeContext 结构：
+            // {
+            //   "workflow_context": {"order_id": "ORDER-001", ...},
+            //   "submit_time": 1234567890,
+            //   "status": "submitted",
+            //   "amount": 1000.0
+            // }
+            return nil
+        },
+        nil,
+    ),
+)
+
+// 节点2: review（审核节点）
+workflow.RegisterWorkflowTask("approval_workflow", "review",
+    workflow.NewNormalTaskWorker(
+        func(ctx context.Context, nodeContext *workflow.JSONContext) error {
+            // ✅ 访问工作流全局上下文
+            orderID, _ := nodeContext.GetString("workflow_context", "order_id")
+            
+            // ✅ 访问前置节点 submit 的输出数据
+            submitTime, _ := nodeContext.GetInt64("pre_node_context", "submit", "submit_time")
+            submitStatus, _ := nodeContext.GetString("pre_node_context", "submit", "status")
+            amount, _ := nodeContext.GetFloat64("pre_node_context", "submit", "amount")
+            
+            fmt.Printf("审核订单 %s，提交时间: %d，状态: %s，金额: %.2f\n",
+                orderID, submitTime, submitStatus, amount)
+            
+            // 写入审核节点的输出数据
+            nodeContext.Set([]string{"review_time"}, time.Now().Unix())
+            nodeContext.Set([]string{"reviewer"}, "manager")
+            nodeContext.Set([]string{"review_result"}, "approved")
+            
+            // review 节点的 NodeContext 结构：
+            // {
+            //   "pre_node_context": {
+            //     "submit": {
+            //       "submit_time": 1234567890,
+            //       "status": "submitted",
+            //       "amount": 1000.0
+            //     }
+            //   },
+            //   "workflow_context": {"order_id": "ORDER-001", ...},
+            //   "review_time": 1234567900,
+            //   "reviewer": "manager",
+            //   "review_result": "approved"
+            // }
+            return nil
+        },
+        nil,
+    ),
+)
+
+// 节点3: approve（批准节点）
+workflow.RegisterWorkflowTask("approval_workflow", "approve",
+    workflow.NewNormalTaskWorker(
+        func(ctx context.Context, nodeContext *workflow.JSONContext) error {
+            // ✅ 访问工作流全局上下文
+            orderID, _ := nodeContext.GetString("workflow_context", "order_id")
+            
+            // ✅ 访问前置节点 submit 的输出（跨节点访问）
+            amount, _ := nodeContext.GetFloat64("pre_node_context", "submit", "amount")
+            
+            // ✅ 访问前置节点 review 的输出（直接前置节点）
+            reviewer, _ := nodeContext.GetString("pre_node_context", "review", "reviewer")
+            reviewResult, _ := nodeContext.GetString("pre_node_context", "review", "review_result")
+            
+            fmt.Printf("批准订单 %s，金额: %.2f，审核人: %s，审核结果: %s\n",
+                orderID, amount, reviewer, reviewResult)
+            
+            // 写入批准节点的输出数据
+            nodeContext.Set([]string{"approve_time"}, time.Now().Unix())
+            nodeContext.Set([]string{"final_status"}, "approved")
+            
+            // approve 节点的 NodeContext 结构：
+            // {
+            //   "pre_node_context": {
+            //     "submit": {
+            //       "submit_time": 1234567890,
+            //       "status": "submitted",
+            //       "amount": 1000.0
+            //     },
+            //     "review": {
+            //       "review_time": 1234567900,
+            //       "reviewer": "manager",
+            //       "review_result": "approved"
+            //     }
+            //   },
+            //   "workflow_context": {"order_id": "ORDER-001", ...},
+            //   "approve_time": 1234568000,
+            //   "final_status": "approved"
+            // }
+            return nil
+        },
+        nil,
+    ),
+)
+```
+
+#### 数据访问模式总结
+
+**访问工作流全局上下文**：
+```go
+// 格式：workflow_context.{字段名}
+orderID, _ := nodeContext.GetString("workflow_context", "order_id")
+amount, _ := nodeContext.GetFloat64("workflow_context", "amount")
+```
+
+**访问前置节点的输出**：
+```go
+// 格式：pre_node_context.{前置节点TaskType}.{字段名}
+submitTime, _ := nodeContext.GetInt64("pre_node_context", "submit", "submit_time")
+reviewer, _ := nodeContext.GetString("pre_node_context", "review", "reviewer")
+```
+
+**访问当前节点自己写入的数据**：
+```go
+// 直接访问，不需要前缀
+currentStatus, _ := nodeContext.GetString("status")
+```
+
+#### 重要注意事项
+
+1. **数据清理规则**：前置节点的 `pre_node_context`、`workflow_context`、`system` 字段会被自动删除，不会传递到下一层
+2. **数据组织方式**：前置节点的数据按 `TaskType` 组织在 `pre_node_context` 中
+3. **跨节点访问**：后续节点可以访问所有前置节点的输出，不仅仅是直接前置节点
+4. **数据隔离**：每个节点的输出数据是独立的，不会相互覆盖
+5. **系统字段**：`system` 字段包含系统错误信息等，不会传递给下游节点
+
 ### 特殊错误类型
 
 工作流引擎提供了一些特殊的错误类型，用于精确控制工作流的执行行为：
